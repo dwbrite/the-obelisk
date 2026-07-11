@@ -16,7 +16,7 @@ Run your project with:
 cargo run -p [project-name]
 ```
 
-## Components
+## In this workspace
 
 ### Fold
 Fold is our take on an incremental programming framework, it's the engine that powers Bog. It’s a rust crate with iterator like primitives for materializing a stream of ever changing data into views. Statically typed and very, very fast.
@@ -25,4 +25,11 @@ Fold is our take on an incremental programming framework, it's the engine that p
 ESE, our first take on a compiler oriented approach to static embedding. It’s a flattening of a tokenizer and map of embeddings into a perfect hash function. It’s also evidence that the approach is worth generalizing, and that there is much to be rethought about how embedding runtimes currently function.
 
 ### Approximate Nearest Neighbors... yeah (ANNy)
-This is a very fast crate for creating HNSWs
+This is a very fast crate for creating HNSWs.
+
+### Examples
+In this directory you'll find a few examples that show bog style databases in various use cases.
+
+- `starter` — the smallest possible fold database: a persistent count and bag, with inserts, reads, and retraction. `cargo run -p starter`
+- `timeseries` — weather readings bucketed into hourly and daily aggregates, updated incrementally. `cargo run -p timeseries`
+- `chat` — a chat backend where fold is the source of truth and every update is broadcast to clients over a websocket. `cargo run -p chat`, then open http://localhost:3000
