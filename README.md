@@ -8,7 +8,7 @@ The best way to create your project is to run this terminal command in the root 
 ./scripts/new-project.sh [project-name]
 ``` 
 
-This creates a new binary crate in `examples/[project-name]`, wires it into the workspace, and adds local path dependencies on `fold`, `anny`, and `ese`.
+This creates a new binary crate in `examples/[project-name]`, wires it into the workspace, and adds local path dependencies on `fold`, `anny`, and `ese` (you may not necessarily use all of these).
 
 Run your project with:
 
