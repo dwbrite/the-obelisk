@@ -11,10 +11,3 @@
 
 ---
 
-You might be looking for:
-
-- [Examples](https://docs.rs/anny/latest/anny/)
-- [Benchmarks](https://docs.rs/anny/latest/anny/)
-- [API Documentation](https://docs.rs/anny/latest/anny/)
-
-## Using ANNy
