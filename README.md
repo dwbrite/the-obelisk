@@ -1,4 +1,4 @@
-# Bog Kit
+# BogKit
 
 This repo contains some of the tooling we've been working on for building Bog style databases. We've collected these tools and examples in one cargo workspace, so you can start building immediately. 
 
