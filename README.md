@@ -21,7 +21,7 @@ cargo run -p [project-name]
 ### Fold
 Fold is our take on an incremental programming framework, it's the engine that powers Bog. It’s a rust crate with iterator like primitives for materializing a stream of ever changing data into views. Statically typed and very, very fast.
 
-### Extremely Static Embedding (ESE)
+### Embedded Static Embeddings (ESE)
 ESE, our first take on a compiler oriented approach to static embedding. It’s a flattening of a tokenizer and map of embeddings into a perfect hash function. It’s also evidence that the approach is worth generalizing, and that there is much to be rethought about how embedding runtimes currently function.
 
 ### Approximate Nearest Neighbors... yeah (ANNy)
