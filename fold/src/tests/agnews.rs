@@ -10,11 +10,6 @@ struct Document {
     label: u32,
 }
 
-fn normalize(tok: &str) -> Option<String> {
-    let t: String = tok.chars().filter(|c| c.is_ascii_alphanumeric()).collect();
-    (!t.is_empty()).then(|| t.to_ascii_lowercase())
-}
-
 fn parse_samples(data: &str) -> Vec<Document> {
     let mut lines = data.lines();
     let mut samples = Vec::new();
@@ -38,7 +33,7 @@ fn parse_samples(data: &str) -> Vec<Document> {
 }
 
 #[test]
-fn agnews_inverted_index() {
+fn agnews_bm25() {
     let data = include_str!("testdata/agnews.txt");
     let samples = parse_samples(data);
     let iters = samples.len();
@@ -47,16 +42,9 @@ fn agnews_inverted_index() {
     let open_start = Instant::now();
     let mut st = Stream::new(
         "agnews.db",
-        FlatMap::new(
-            |d: &Document| {
-                let title = d.title.clone();
-                d.body
-                    .split_ascii_whitespace()
-                    .filter_map(normalize)
-                    .map(move |tok| Keyed::new(title.clone(), tok))
-                    .collect::<Vec<_>>()
-            },
-            terminal::InvertedIndex::new("agnews_ii"),
+        Map::new(
+            |d: &Document| Keyed::new(d.id, d.body.clone()),
+            terminal::search::Bm25::new("agnews_bm25"),
         ),
     );
     let open_dur = open_start.elapsed();
@@ -73,32 +61,48 @@ fn agnews_inverted_index() {
 
     let queries = [
         "the",
-        "government",
-        "microsoft",
-        "oil",
+        "government shutdown",
+        "microsoft windows security",
+        "oil prices rise",
         "zzzzzzzzzzzzzz",
-        "georgia",
-        "china",
+        "olympic gold medal",
+        "china trade",
     ];
-    st.rtx(|ii| {
+    st.rtx(|idx| {
+        assert_eq!(idx.doc_count(), iters as i64);
         for q in queries {
             let start = Instant::now();
-            let hits = ii.search(&q.to_string());
-            println!("search {q:?}: {} hits in {:?}", hits.len(), start.elapsed());
+            let hits = idx.search(q, 10);
+            let dur = start.elapsed();
+            assert!(hits.windows(2).all(|w| w[0].score >= w[1].score));
+            let top: Vec<_> = hits
+                .iter()
+                .take(3)
+                .map(|h| (h.val, (h.score * 100.0).round() / 100.0))
+                .collect();
+            println!("search {q:?}: {} hits in {dur:?}, top {top:?}", hits.len());
+            if q != "zzzzzzzzzzzzzz" {
+                assert!(!hits.is_empty());
+            } else {
+                assert!(hits.is_empty());
+            }
         }
     });
 
     let start = Instant::now();
-    st.wtx(|tx| {
-        for doc in &samples {
-            tx.remove(doc);
-        }
-    });
+    for chunk in samples.chunks(5_000) {
+        st.wtx(|tx| {
+            for doc in chunk {
+                tx.remove(doc);
+            }
+        });
+    }
     let del = start.elapsed();
 
-    st.rtx(|ii| {
+    st.rtx(|idx| {
+        assert_eq!(idx.doc_count(), 0);
         for q in queries {
-            assert!(ii.search(&q.to_string()).is_empty());
+            assert!(idx.search(q, 10).is_empty());
         }
     });
 

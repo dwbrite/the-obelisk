@@ -23,10 +23,16 @@
 //! buffering within a transaction and emitting downstream deltas at commit:
 //! - [`Distinct`] — collapse multiplicities to set semantics
 //! - [`Aggregate`] — per-key incremental aggregation
+//! - [`TopK`] — retain the k highest-scored records, retracting the rest
+//! - [`Retain`] — retract records once they age past a wall-clock horizon
 //!
 //! Keying operators convert between plain and [`Keyed`] streams:
 //! - [`KeyBy`] — attach a key extracted from each datum
 //! - [`Unkey`] — discard the key, forwarding the value
+//!
+//! Scoring operators do the same for [`Scored`] streams:
+//! - [`ScoreBy`] — attach an ordering score extracted from each datum
+//! - [`Unscore`] — discard the score, forwarding the value
 //!
 //! # Fan-out
 //! Tuples of `Push` nodes (up to 16 elements) implement `Push` by
@@ -56,11 +62,15 @@ mod tuple;
 ///    names.
 /// 2. [`push`](Push::push) — once per delta within a write transaction.
 ///    Stateful nodes typically buffer here rather than touching the store.
-/// 3. [`commit`](Push::commit) — once as the transaction completes: flush
-///    buffered state and emit any resulting downstream deltas.
-/// 4. [`abort`](Push::abort) — instead of `commit` if the transaction
-///    panics: discard buffered state so the node is clean for the next
-///    transaction.
+/// 3. [`commit`](Push::commit) — as the transaction completes, and before
+///    each mid-transaction read ([`Tx::rtx`](crate::stream::Tx::rtx)):
+///    flush buffered state and emit any resulting downstream deltas. This
+///    can run several times per transaction, with pushes resuming in
+///    between, so committing must leave the node ready for more deltas.
+/// 4. [`abort`](Push::abort) — instead of the final `commit` if the
+///    transaction panics: discard buffered state so the node is clean for
+///    the next transaction. Store writes from earlier `commit` calls in the
+///    aborted transaction roll back with it.
 ///
 /// Operators must propagate `commit`/`abort`/`reader` to their downstream
 /// node(s) even when they hold no state themselves.
@@ -78,7 +88,11 @@ pub trait Push<D: Clone> {
     /// them.
     fn push(&mut self, tx: &mut WriteTx<'_>, data: &D, delta: isize);
 
-    /// Flushes pending state to the store; called once as transaction completes.
+    /// Flushes pending state to the store, emitting any resulting
+    /// downstream deltas. Called as the transaction completes and before
+    /// each mid-transaction read ([`Tx::rtx`](crate::stream::Tx::rtx)), so
+    /// it may run several times per transaction and must leave the node
+    /// ready to accept further pushes.
     fn commit(&mut self, tx: &mut WriteTx<'_>) {
         let _ = tx;
     }
@@ -140,6 +154,37 @@ impl<K, V> Keyed<K, V> {
 
     /// Discard the key.
     pub fn unkey(self) -> V {
+        self.val
+    }
+}
+
+/// A value paired with an ordering score.
+///
+/// The currency of scored operators: [`ScoreBy`] produces `Scored` streams,
+/// [`TopK`] consumes and forwards them, and [`Unscore`] strips the score
+/// back off. Unlike [`Keyed`] keys, scores are ordered — see the
+/// [`Score`] trait. Scoring by event timestamp turns [`TopK`] into a
+/// sliding "most recent k records" window.
+#[derive(Clone)]
+pub struct Scored<S, V> {
+    pub score: S,
+    pub val: V,
+}
+impl<S, V> Scored<S, V> {
+    pub fn new(score: S, val: V) -> Self {
+        Scored { score, val }
+    }
+
+    /// Score `val` by a function of itself.
+    pub fn new_by<F: Fn(&V) -> S>(val: V, score_fn: F) -> Self {
+        Scored {
+            score: (score_fn)(&val),
+            val,
+        }
+    }
+
+    /// Discard the score.
+    pub fn unscore(self) -> V {
         self.val
     }
 }

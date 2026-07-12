@@ -5,6 +5,31 @@ use std::time::Instant;
 #[cfg(test)]
 mod agnews;
 
+#[cfg(test)]
+mod bm25;
+
+#[cfg(test)]
+mod keyed_stream;
+
+#[cfg(test)]
+mod retain;
+
+#[cfg(test)]
+mod rtx;
+
+#[cfg(test)]
+mod scored;
+
+#[cfg(test)]
+mod terminals;
+
+/// A path in the system temp dir, cleared of any previous test run's state.
+pub(crate) fn fresh_db(name: &str) -> std::path::PathBuf {
+    let path = std::env::temp_dir().join(name);
+    let _ = std::fs::remove_dir_all(&path);
+    path
+}
+
 #[test]
 fn test_name() {
     let mut st = Stream::new(

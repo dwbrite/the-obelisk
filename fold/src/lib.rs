@@ -2,8 +2,9 @@
 //!
 //! A [`Stream`](stream::Stream) accepts *deltas* — a datum paired with a
 //! signed multiplicity — and pushes them through a statically composed
-//! [`pipeline`] of operators into persistent sinks (counts, bags, aggregates,
-//! inverted indexes). Every sink is maintained incrementally: removing a
+//! [`pipeline`] of operators into persistent sinks (counts, bags, keyed
+//! views, ordered indexes, histograms, full-text search). Every sink is
+//! maintained incrementally: removing a
 //! previously inserted record retracts its effect everywhere, and nothing is
 //! recomputed from scratch.
 //!

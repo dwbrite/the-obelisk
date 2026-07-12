@@ -3,7 +3,8 @@
 //! [`Stream`] owns a pipeline and its backing store, and mediates all access
 //! through transactions: [`Stream::wtx`] atomically feeds a batch of deltas
 //! through the pipeline, [`Stream::rtx`] reads every sink from one pinned
-//! snapshot.
+//! snapshot. [`KeyedStream`] fronts a stream with a primary-key table for
+//! upsert / delete-by-key workflows.
 
 pub use fjall::Readable;
 use std::marker::PhantomData;
@@ -11,6 +12,9 @@ use std::marker::PhantomData;
 mod unkeyed;
 use fxhash::FxHashSet;
 pub use unkeyed::*;
+
+mod keyed;
+pub use keyed::*;
 
 use crate::pipeline::Push;
 
@@ -24,7 +28,7 @@ pub struct Tx<'g, 'tx, D: Clone, P: Push<D>> {
     _p: PhantomData<D>,
 }
 
-impl<D: Clone, P: Push<D>> Tx<'_, '_, D, P> {
+impl<'tx, D: Clone, P: Push<D>> Tx<'_, 'tx, D, P> {
     /// Push `data` with an explicit signed multiplicity: `+n` inserts `n`
     /// copies, `-n` retracts them.
     #[inline]
@@ -41,6 +45,25 @@ impl<D: Clone, P: Push<D>> Tx<'_, '_, D, P> {
     pub fn remove(&mut self, data: &D) {
         self.push(data, -1);
     }
+
+    /// Read every sink from this write transaction's own uncommitted state.
+    ///
+    /// First flushes buffered operator state down the pipeline — the same
+    /// flush that runs when the transaction completes — so the readers
+    /// observe all previously committed state plus every delta pushed so
+    /// far in this transaction. Pushes may resume after the closure
+    /// returns; if the transaction ends up panicking, everything it read
+    /// rolls back with it.
+    ///
+    /// Like [`Stream::rtx`], the closure receives the pipeline's reader,
+    /// which mirrors its sink structure.
+    pub fn rtx<'s, R>(
+        &'s mut self,
+        f: impl FnOnce(P::Reader<'s, fjall::SingleWriterWriteTx<'tx>>) -> R,
+    ) -> R {
+        self.pipeline.commit(self.tx);
+        f(self.pipeline.reader(&self.tx.tx))
+    }
 }
 
 /// Passed through the graph once at startup. Resolves named keyspaces and
@@ -55,6 +78,12 @@ impl PipelineInitCtx<'_> {
             store,
             taken: FxHashSet::default(),
         }
+    }
+
+    /// A snapshot of committed state, letting stateful nodes recover
+    /// in-memory state (sequence counters, watermarks) at startup.
+    pub fn snapshot(&self) -> fjall::Snapshot {
+        self.store.read_tx()
     }
 
     /// Open (or create) the keyspace for the named node, backing its state
@@ -119,6 +148,25 @@ impl WriteTx<'_> {
         k: impl AsRef<[u8]>,
     ) -> Option<fjall::Slice> {
         self.tx.get(ks, k).unwrap()
+    }
+
+    /// Iterate the keyspace in key order, seeing this transaction's own
+    /// uncommitted writes. The iterator is double-ended; `.rev()` scans
+    /// descending.
+    #[inline]
+    pub fn iter(&self, ks: &fjall::SingleWriterTxKeyspace) -> fjall::Iter {
+        self.tx.iter(ks)
+    }
+
+    /// Iterate keys starting with `prefix` in key order, seeing this
+    /// transaction's own uncommitted writes.
+    #[inline]
+    pub fn prefix(
+        &self,
+        ks: &fjall::SingleWriterTxKeyspace,
+        prefix: impl AsRef<[u8]>,
+    ) -> fjall::Iter {
+        self.tx.prefix(ks, prefix)
     }
 
     pub fn commit(self) {

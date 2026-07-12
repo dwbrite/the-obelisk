@@ -1,6 +1,12 @@
 mod keyed;
 pub use keyed::*;
 
+mod retain;
+pub use retain::*;
+
+mod scored;
+pub use scored::*;
+
 use fxhash::FxHashMap;
 use serde::Serialize;
 use std::marker::PhantomData;
@@ -200,7 +206,7 @@ where
 /// Collapses multiplicity to {0, 1}. Stateful: persists per-element counts in
 /// its own keyspace, emits +1 downstream when a count crosses 0→positive and
 /// -1 when it crosses positive→0. Emission happens at commit time so hot
-/// elements within one tx collapse to at most one downstream delta.
+/// elements collapse to at most one downstream delta per commit.
 pub struct Distinct<D, G> {
     name: String,
     ks: Option<fjall::SingleWriterTxKeyspace>,

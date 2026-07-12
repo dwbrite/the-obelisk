@@ -44,7 +44,9 @@ impl<D: Clone, P: Push<D>> Stream<D, P> {
     /// On commit, stateful nodes flush their buffered updates to the store.
     /// If `f` panics, the transaction rolls back — the store is untouched,
     /// pipeline nodes reset their pending state, and the panic resumes.
-    // TODO: rtx-in-wtx
+    ///
+    /// [`Tx::rtx`] reads the sinks mid-transaction, seeing every delta
+    /// pushed so far.
     pub fn wtx<R>(&mut self, f: impl FnOnce(&mut Tx<'_, '_, D, P>) -> R) -> R {
         let mut wtx = WriteTx::new(self.store.write_tx());
 
@@ -85,5 +87,9 @@ impl<D: Clone, P: Push<D>> Stream<D, P> {
     /// checkpointing additionally hardens them against OS/power failure.
     pub fn checkpoint(&mut self) {
         self.store.persist(fjall::PersistMode::SyncAll).unwrap();
+    }
+
+    pub(crate) fn store(&self) -> &fjall::SingleWriterTxDatabase {
+        &self.store
     }
 }
