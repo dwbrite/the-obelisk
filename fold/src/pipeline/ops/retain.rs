@@ -62,6 +62,7 @@ pub struct Retain<V, G, C = fn() -> u64> {
     ks_idx: Option<fjall::SingleWriterTxKeyspace>,
     // encoded record -> (decoded record, net delta this tx)
     pending: FxHashMap<Vec<u8>, (V, i64)>,
+    scratch: Vec<u8>,
     pub next: G,
 }
 
@@ -86,6 +87,7 @@ impl<V, G, C: Fn() -> u64> Retain<V, G, C> {
             ks_buf: None,
             ks_idx: None,
             pending: FxHashMap::default(),
+            scratch: Default::default(),
             next,
         }
     }
@@ -139,7 +141,11 @@ where
         }
         for (key, value) in expired {
             let (count, val): (i64, V) = postcard::from_bytes(&value).unwrap();
-            let mut idx_key = postcard::to_stdvec(&val).unwrap();
+
+            self.scratch.clear();
+            postcard::to_io(&val, &mut self.scratch).unwrap();
+
+            let idx_key = &mut self.scratch;
             idx_key.extend_from_slice(&key);
             tx.remove(&ks_buf, &key);
             tx.remove(&ks_idx, &idx_key);
@@ -156,7 +162,11 @@ where
                 let mut key = Vec::with_capacity(16);
                 (now, self.seq).encode(&mut key);
                 self.seq += 1;
-                tx.insert(&ks_buf, &key, postcard::to_stdvec(&(delta, &val)).unwrap());
+
+                self.scratch.clear();
+                postcard::to_io(&(delta, &val), &mut self.scratch).unwrap();
+
+                tx.insert(&ks_buf, &key, &self.scratch);
                 let mut idx_key = enc_val;
                 idx_key.extend_from_slice(&key);
                 tx.insert(&ks_idx, &idx_key, []);
@@ -183,8 +193,9 @@ where
                         tx.remove(&ks_buf, key);
                         tx.remove(&ks_idx, &idx_key);
                     } else {
-                        let v = postcard::to_stdvec(&(count - take, &val)).unwrap();
-                        tx.insert(&ks_buf, key, v);
+                        self.scratch.clear();
+                        postcard::to_io(&(count - take, &val), &mut self.scratch).unwrap();
+                        tx.insert(&ks_buf, key, &self.scratch);
                     }
                     need -= take;
                     matched += take;

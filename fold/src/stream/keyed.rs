@@ -1,9 +1,23 @@
+use std::cell::RefCell;
 use std::path::Path;
 
 use serde::{Serialize, de::DeserializeOwned};
 
 use super::{Stream, Tx};
 use crate::pipeline::{Keyed, Push};
+
+thread_local! {
+    /// Scratch key buffer for the `&self` read paths ([`KeyedStream::get`],
+    /// [`KeyedStream::contains`]), which can't borrow the stream's own
+    /// buffers mutably.
+    static READ_KEY_BUF: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Serialize `value` into `buf`, reusing its capacity.
+fn enc<T: Serialize + ?Sized>(buf: &mut Vec<u8>, value: &T) {
+    buf.clear();
+    postcard::to_io(value, &mut *buf).unwrap();
+}
 
 /// A [`Stream`] fronted by a primary-key table: each key holds at most one
 /// record, and the table decides what flows into the graph.
@@ -40,6 +54,8 @@ use crate::pipeline::{Keyed, Push};
 pub struct KeyedStream<K: Clone, D: Clone, P: Push<Keyed<K, D>>> {
     inner: Stream<Keyed<K, D>, P>,
     table: fjall::SingleWriterTxKeyspace,
+    key_buf: Vec<u8>,
+    val_buf: Vec<u8>,
 }
 
 impl<K, D, P> KeyedStream<K, D, P>
@@ -56,7 +72,12 @@ where
             .store()
             .keyspace("keyed_root", fjall::KeyspaceCreateOptions::default)
             .unwrap();
-        KeyedStream { inner, table }
+        KeyedStream {
+            inner,
+            table,
+            key_buf: Default::default(),
+            val_buf: Default::default(),
+        }
     }
 
     /// Run a write transaction over the table and the pipeline: every
@@ -64,7 +85,16 @@ where
     /// back together if it panics. See [`Stream::wtx`].
     pub fn wtx<R>(&mut self, f: impl FnOnce(&mut KeyedTx<'_, '_, '_, K, D, P>) -> R) -> R {
         let table = self.table.clone();
-        self.inner.wtx(move |tx| f(&mut KeyedTx { tx, table }))
+        let key_buf = &mut self.key_buf;
+        let val_buf = &mut self.val_buf;
+        self.inner.wtx(move |tx| {
+            f(&mut KeyedTx {
+                tx,
+                table,
+                key_buf,
+                val_buf,
+            })
+        })
     }
 
     /// Run a read transaction over one consistent snapshot across all
@@ -76,22 +106,28 @@ where
     /// The committed record under `key`, if any.
     pub fn get(&self, key: &K) -> Option<D> {
         use fjall::Readable;
-        self.inner
-            .store()
-            .read_tx()
-            .get(&self.table, postcard::to_stdvec(key).unwrap())
-            .unwrap()
-            .map(|v| postcard::from_bytes(&v).unwrap())
+        READ_KEY_BUF.with_borrow_mut(|buf| {
+            enc(buf, key);
+            self.inner
+                .store()
+                .read_tx()
+                .get(&self.table, &*buf)
+                .unwrap()
+                .map(|v| postcard::from_bytes(&v).unwrap())
+        })
     }
 
     /// Whether `key` holds a committed record.
     pub fn contains(&self, key: &K) -> bool {
         use fjall::Readable;
-        self.inner
-            .store()
-            .read_tx()
-            .contains_key(&self.table, postcard::to_stdvec(key).unwrap())
-            .unwrap()
+        READ_KEY_BUF.with_borrow_mut(|buf| {
+            enc(buf, key);
+            self.inner
+                .store()
+                .read_tx()
+                .contains_key(&self.table, &*buf)
+                .unwrap()
+        })
     }
 
     /// Fsync all committed state to disk; see [`Stream::checkpoint`].
@@ -104,6 +140,8 @@ where
 pub struct KeyedTx<'a, 'g, 'tx, K: Clone, D: Clone, P: Push<Keyed<K, D>>> {
     tx: &'a mut Tx<'g, 'tx, Keyed<K, D>, P>,
     table: fjall::SingleWriterTxKeyspace,
+    key_buf: &'a mut Vec<u8>,
+    val_buf: &'a mut Vec<u8>,
 }
 
 impl<'tx, K, D, P> KeyedTx<'_, '_, 'tx, K, D, P>
@@ -112,10 +150,11 @@ where
     D: Clone + Serialize + DeserializeOwned,
     P: Push<Keyed<K, D>>,
 {
-    fn get_raw(&mut self, kenc: &[u8]) -> Option<D> {
+    /// Look up whatever key is currently encoded in `key_buf`.
+    fn get_raw(&mut self) -> Option<D> {
         self.tx
             .tx
-            .get(&self.table, kenc)
+            .get(&self.table, &*self.key_buf)
             .map(|v| postcard::from_bytes(&v).unwrap())
     }
 
@@ -126,10 +165,10 @@ where
     /// is inserted; replacing a record with an equal one leaves the graph
     /// untouched.
     pub fn upsert(&mut self, key: &K, data: &D) -> Option<D> {
-        let kenc = postcard::to_stdvec(key).unwrap();
-        let denc = postcard::to_stdvec(data).unwrap();
-        let old = match self.tx.tx.get(&self.table, &kenc) {
-            Some(v) if v.as_ref() == denc.as_slice() => {
+        enc(self.key_buf, key);
+        enc(self.val_buf, data);
+        let old = match self.tx.tx.get(&self.table, &*self.key_buf) {
+            Some(v) if v.as_ref() == self.val_buf.as_slice() => {
                 return Some(data.clone()); // unchanged: no graph churn
             }
             Some(v) => {
@@ -139,7 +178,9 @@ where
             }
             None => None,
         };
-        self.tx.tx.insert(&self.table, &kenc, &denc);
+        self.tx
+            .tx
+            .insert(&self.table, &*self.key_buf, &*self.val_buf);
         self.tx.push(&Keyed::new(key.clone(), data.clone()), 1);
         old
     }
@@ -147,23 +188,23 @@ where
     /// Remove and return the record under `key`, retracting it from the
     /// pipeline. Removing an absent key is a no-op.
     pub fn remove(&mut self, key: &K) -> Option<D> {
-        let kenc = postcard::to_stdvec(key).unwrap();
-        let old = self.get_raw(&kenc)?;
-        self.tx.tx.remove(&self.table, &kenc);
+        enc(self.key_buf, key);
+        let old = self.get_raw()?;
+        self.tx.tx.remove(&self.table, &*self.key_buf);
         self.tx.push(&Keyed::new(key.clone(), old.clone()), -1);
         Some(old)
     }
 
     /// The record under `key`, seeing this transaction's own writes.
     pub fn get(&mut self, key: &K) -> Option<D> {
-        let kenc = postcard::to_stdvec(key).unwrap();
-        self.get_raw(&kenc)
+        enc(self.key_buf, key);
+        self.get_raw()
     }
 
     /// Whether `key` holds a record, seeing this transaction's own writes.
     pub fn contains(&mut self, key: &K) -> bool {
-        let kenc = postcard::to_stdvec(key).unwrap();
-        self.tx.tx.get(&self.table, &kenc).is_some()
+        enc(self.key_buf, key);
+        self.tx.tx.get(&self.table, &*self.key_buf).is_some()
     }
 
     /// Read every sink from this write transaction's own uncommitted

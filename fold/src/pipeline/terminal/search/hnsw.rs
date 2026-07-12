@@ -10,10 +10,6 @@ use crate::{
     stream::{PipelineInitCtx, WriteTx},
 };
 
-fn encode_vector<T: Serialize>(v: &[T]) -> Vec<u8> {
-    postcard::to_stdvec(v).unwrap()
-}
-
 fn decode_vector<T: DeserializeOwned + Copy, const DIM: usize>(bytes: &[u8]) -> [T; DIM] {
     let v: Vec<T> = postcard::from_bytes(bytes).unwrap();
     std::array::from_fn(|i| v[i])
@@ -148,6 +144,7 @@ pub struct Hnsw<
     state: Rc<RefCell<State<K, T, M, DIM, M0, TOP_K, EF_SEARCH, EF_BUILD, MAX_LEVEL>>>,
     // encoded key -> (key, latest embedding, net delta this tx)
     pending: FxHashMap<Vec<u8>, (K, [T; DIM], i64)>,
+    vec_buf: Vec<u8>,
 }
 
 impl<
@@ -184,6 +181,7 @@ where
                 stale: false,
             })),
             pending: FxHashMap::default(),
+            vec_buf: Default::default(),
         }
     }
 }
@@ -251,7 +249,10 @@ where
         for (kenc, (key, vec, delta)) in self.pending.drain() {
             match delta {
                 1.. => {
-                    tx.insert(&ks, &kenc, encode_vector(&vec[..]));
+                    self.vec_buf.clear();
+                    postcard::to_io(&vec[..], &mut self.vec_buf).unwrap();
+
+                    tx.insert(&ks, &kenc, &self.vec_buf);
                     state.upsert(kenc, key, vec);
                 }
                 0 => {}
