@@ -2,7 +2,7 @@
 name = "ese"
 version = "0.1.0"
 edition = "2024"
-description = "Extremely Static Embeddings"
+description = "Embedded Static Embeddings"
 readme = "readme.md"
 license-file = "license"
 authors = ["W. Turner Abney <wta@ieee.org>"]
