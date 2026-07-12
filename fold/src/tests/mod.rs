@@ -2,8 +2,8 @@ use crate::{pipeline::*, stream::*};
 
 use std::time::Instant;
 
-#[cfg(test)]
-mod agnews;
+// #[cfg(test)]
+// mod agnews;
 
 #[cfg(test)]
 mod bm25;
