@@ -1,20 +1,26 @@
 //! Text search over a fold database: BM25 keyword search and HNSW semantic
 //! search, maintained incrementally from one stream of documents.
 //!
-//! Everything derives from a single `Doc` insert. The pipeline fans each
-//! document out to three views:
+//! The stream is a `KeyedStream`: a primary-key table (id -> text) fronting
+//! the pipeline. `upsert` retracts a key's old record before inserting the
+//! new one and `remove` retracts by key alone — so editing or forgetting a
+//! memory updates every index automatically, and callers never reproduce a
+//! record to delete it.
+//!
+//! Each `Keyed { key: id, val: text }` delta fans out to three views:
 //!
 //!   - a BM25 full-text index (`terminal::search::Bm25`)
 //!   - an HNSW vector index over ese embeddings (`terminal::search::Hnsw`)
 //!   - a doc table for id -> text lookup (`terminal::Table`)
 //!
-//! The embedding is computed *inside* the pipeline by a `Map`, so inserting
-//! a document indexes it everywhere, and retracting it removes it
+//! The embedding is computed *inside* the pipeline by a `Map`, so a single
+//! upsert (re)indexes the document everywhere and a retraction removes it
 //! everywhere — including genuinely deleting the node from the HNSW graph
 //! (no tombstones, recall doesn't decay under churn).
 //!
-//! This is a good skeleton for agent memory: `add` on new facts, `rm` to
-//! forget, hybrid search to recall. All of it is durable and transactional.
+//! This is a good skeleton for agent memory: upsert new or corrected facts,
+//! remove stale ones, hybrid search to recall. All durable, all
+//! transactional.
 //!
 //! Run `cargo run -p search` for a scripted demo; it drops into an
 //! interactive loop afterwards if you're on a terminal.
@@ -24,16 +30,9 @@ use std::io::{BufRead, IsTerminal, Write};
 
 use anny::metric::Cosine;
 use fold::pipeline::{Keyed, Map, Scored, terminal};
-use fold::stream::Stream;
-use serde::{Deserialize, Serialize};
+use fold::stream::KeyedStream;
 
 const DIM: usize = ese::DIMENSIONS;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct Doc {
-    id: u64,
-    text: String,
-}
 
 /// Reciprocal-rank-fusion constant: dampens the head so one list can't
 /// dominate. 60 is the value from the original RRF paper.
@@ -41,8 +40,8 @@ const RRF_K: f64 = 60.0;
 
 // The pipeline type contains closures and so can't be written down, which
 // means helpers that read the stream can't be ordinary functions taking
-// `&Stream<...>` — they're macros instead, expanded where the concrete
-// type is known.
+// `&KeyedStream<...>` — they're macros instead, expanded where the
+// concrete type is known.
 
 /// Search all three ways and print the top hits.
 macro_rules! demo {
@@ -72,68 +71,59 @@ macro_rules! demo {
     }};
 }
 
-/// Retract a document by id. Retraction needs the original datum (fold
-/// re-runs the pipeline functions on it), so fetch the text from the table
-/// and rebuild the `Doc`.
-macro_rules! remove_by_id {
-    ($st:expr, $id:expr) => {{
-        let id: u64 = $id;
-        let text: Option<String> = $st.rtx(|(_, _, docs)| docs.get(&id));
-        match text {
-            Some(text) => {
-                $st.wtx(|tx| tx.remove(&Doc { id, text }));
-                println!("forgot [{id}]\n");
-            }
-            None => println!("no memory with id {id}\n"),
-        }
-    }};
-}
-
 fn main() {
     let db_path = std::env::temp_dir().join("bog-kit-search.db");
     let _ = std::fs::remove_dir_all(&db_path);
 
-    let mut st = Stream::new(
+    // KeyedStream pushes Keyed<u64, String> deltas through the pipeline;
+    // Bm25 and Table consume them directly, the Hnsw branch maps the text
+    // to its embedding first
+    let mut st = KeyedStream::new(
         &db_path,
         (
             // keyword: tokenized text, ranked by BM25 relevance
-            Map::new(
-                |d: &Doc| Keyed::new(d.id, d.text.clone()),
-                terminal::search::Bm25::new("bm25"),
-            ),
+            terminal::search::Bm25::new("bm25"),
             // semantic: ese embeds the text right here in the pipeline.
             // ese is a pure function of the text, which is exactly what
             // fold requires for retraction to cancel cleanly.
             Map::new(
-                |d: &Doc| Keyed::new(d.id, ese::encode_single(&d.text)),
+                |d: &Keyed<u64, String>| Keyed::new(d.key, ese::encode_single(&d.val)),
                 terminal::search::Hnsw::<u64, f32, Cosine, DIM>::new("vecs", Cosine, 42),
             ),
-            // the source of truth for id -> text (also what lets us
-            // retract by id alone: fetch the text, rebuild the Doc)
-            Map::new(
-                |d: &Doc| Keyed::new(d.id, d.text.clone()),
-                terminal::Table::new("docs"),
-            ),
+            // id -> text, for showing hits and scanning for the next free id
+            terminal::Table::new("docs"),
         ),
     );
 
     let memories = seed_memories();
+    let count = memories.len();
     st.wtx(|tx| {
-        for m in &memories {
-            tx.insert(m);
+        for (id, text) in memories.into_iter().enumerate() {
+            tx.upsert(&(id as u64), &text.to_string());
         }
     });
 
-    println!("indexed {} memories\n", memories.len());
+    println!("indexed {count} memories\n");
 
     demo!(st, "keyword search (bm25)", "kubernetes deploy");
     demo!(st, "semantic search (hnsw over ese)", "user was unhappy");
     demo!(st, "hybrid (reciprocal rank fusion)", "database performance");
 
-    // forgetting: retract by id — every index updates incrementally
-    println!("== forgetting memory 2 ==");
-    remove_by_id!(st, 2);
-    demo!(st, "same hybrid query after forgetting", "database performance");
+    // correcting a memory: upsert retracts the old text from every index
+    // and indexes the new one, atomically
+    println!("== updating memory 6 (staging moved off the pi) ==\n");
+    st.wtx(|tx| {
+        tx.upsert(
+            &6,
+            &"the staging environment moved to a cloud vm in april".to_string(),
+        )
+    });
+    demo!(st, "search after the update", "raspberry pi");
+
+    // forgetting: remove by key — no need to reproduce the record
+    println!("== forgetting memory 2 ==\n");
+    st.wtx(|tx| tx.remove(&2));
+    demo!(st, "hybrid query after forgetting", "database performance");
 
     // a tiny interactive loop: the bones of an agent memory tool
     if std::io::stdin().is_terminal() {
@@ -154,16 +144,14 @@ fn main() {
                 let id = st.rtx(|(_, _, docs)| {
                     docs.iter().map(|(id, _)| id).max().map_or(0, |m| m + 1)
                 });
-                st.wtx(|tx| {
-                    tx.insert(&Doc {
-                        id,
-                        text: text.to_string(),
-                    })
-                });
+                st.wtx(|tx| tx.upsert(&id, &text.to_string()));
                 println!("remembered as [{id}]");
             } else if let Some(id) = line.strip_prefix("rm ") {
                 match id.trim().parse::<u64>() {
-                    Ok(id) => remove_by_id!(st, id),
+                    Ok(id) => match st.wtx(|tx| tx.remove(&id)) {
+                        Some(_) => println!("forgot [{id}]"),
+                        None => println!("no memory with id {id}"),
+                    },
                     Err(_) => println!("usage: rm <numeric id>"),
                 }
             } else {
@@ -190,8 +178,8 @@ fn hybrid(keyword: &[Scored<f64, u64>], semantic: &[Scored<f32, u64>]) -> Vec<(u
     fused
 }
 
-fn seed_memories() -> Vec<Doc> {
-    [
+fn seed_memories() -> Vec<&'static str> {
+    vec![
         "the user prefers rust over python for backend services",
         "deployed the api service to the kubernetes cluster on friday",
         "the postgres database was slow because the orders table was missing an index",
@@ -205,11 +193,4 @@ fn seed_memories() -> Vec<Doc> {
         "the team decided to adopt fold for all incremental state at the offsite",
         "meeting notes: ship the embedding search demo before the conference",
     ]
-    .into_iter()
-    .enumerate()
-    .map(|(i, text)| Doc {
-        id: i as u64,
-        text: text.to_string(),
-    })
-    .collect()
 }

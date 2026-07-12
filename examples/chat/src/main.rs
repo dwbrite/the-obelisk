@@ -20,7 +20,7 @@ use axum::{
     response::Html,
     routing::get,
 };
-use fold::pipeline::{Aggregate, KeyBy, Keyed, Map, terminal};
+use fold::pipeline::{Aggregate, KeyBy, terminal};
 use fold::stream::Stream;
 use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
@@ -50,8 +50,7 @@ macro_rules! snapshot {
             let mut messages: Vec<ChatMsg> = messages.iter().map(|(m, _)| m).collect();
             messages.sort_by_key(|m| m.id);
 
-            let mut author_counts: Vec<(String, i64)> =
-                author_counts.iter().map(|(ac, _)| ac).collect();
+            let mut author_counts: Vec<(String, i64)> = author_counts.iter().collect();
             author_counts.sort_by(|a, b| b.1.cmp(&a.1));
 
             ChatState {
@@ -87,16 +86,15 @@ fn ingest(
             terminal::Count::new("messages_total"),
             // the durable message log
             terminal::Bag::<ChatMsg>::new("messages"),
-            // fold flavor: an incrementally-maintained count per author
+            // fold flavor: an incrementally-maintained count per author.
+            // Aggregate emits a changelog per key; Table materializes it
+            // as the current count per author.
             KeyBy::new(
                 |m: &ChatMsg| m.author.clone(),
                 Aggregate::new(
                     "by_author",
                     |acc: &mut i64, _m: &ChatMsg, delta| *acc += delta as i64,
-                    Map::new(
-                        |k: &Keyed<String, i64>| (k.key.clone(), k.val),
-                        terminal::Bag::<(String, i64)>::new("author_counts"),
-                    ),
+                    terminal::Table::new("author_counts"),
                 ),
             ),
         ),

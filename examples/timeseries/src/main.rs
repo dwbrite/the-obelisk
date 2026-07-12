@@ -1,4 +1,4 @@
-use fold::pipeline::{Aggregate, Filter, KeyBy, Keyed, Map, terminal};
+use fold::pipeline::{Aggregate, Filter, KeyBy, terminal};
 use fold::stream::Stream;
 use serde::{Deserialize, Serialize};
 
@@ -41,10 +41,7 @@ macro_rules! print_snapshot {
         $st.rtx(|(total, hourly, daily_rain, raw)| {
             println!("total readings: {}", total.get());
 
-            let mut hours: Vec<_> = hourly
-                .iter()
-                .map(|((hour, stats), _)| (hour, stats))
-                .collect();
+            let mut hours: Vec<_> = hourly.iter().collect();
             hours.sort_by_key(|(hour, _)| *hour);
             println!("hourly weather:");
             for (hour, stats) in hours {
@@ -57,10 +54,7 @@ macro_rules! print_snapshot {
                 );
             }
 
-            let mut days: Vec<_> = daily_rain
-                .iter()
-                .map(|((day, rain_tenths), _)| (day, rain_tenths))
-                .collect();
+            let mut days: Vec<_> = daily_rain.iter().collect();
             days.sort_by_key(|(day, _)| *day);
             println!("daily rain:");
             for (day, rain_tenths) in days {
@@ -80,29 +74,22 @@ fn main() {
         &db_path,
         (
             terminal::Count::new("readings_total"),
+            // Aggregate emits a changelog per key (-old, +new); Table is
+            // the natural sink for it — it always holds the current
+            // accumulator per key, point-readable and iterable
             KeyBy::new(
                 |r: &Reading| r.at_ms / HOUR_MS,
                 Aggregate::new(
                     "weather_by_hour",
                     hourly_step,
-                    Map::new(
-                        |k: &Keyed<u64, HourStats>| (k.key, k.val.clone()),
-                        terminal::Bag::<(u64, HourStats)>::new("hourly_weather"),
-                    ),
+                    terminal::Table::new("hourly_weather"),
                 ),
             ),
             Filter::new(
                 |r: &Reading| r.rain_mm_tenths > 0,
                 KeyBy::new(
                     |r: &Reading| r.at_ms / DAY_MS,
-                    Aggregate::new(
-                        "rain_by_day",
-                        rain_step,
-                        Map::new(
-                            |k: &Keyed<u64, i64>| (k.key, k.val),
-                            terminal::Bag::<(u64, i64)>::new("daily_rain"),
-                        ),
-                    ),
+                    Aggregate::new("rain_by_day", rain_step, terminal::Table::new("daily_rain")),
                 ),
             ),
             terminal::Bag::<Reading>::new("raw_readings"),
