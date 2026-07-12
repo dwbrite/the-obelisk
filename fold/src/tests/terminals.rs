@@ -93,7 +93,10 @@ fn ranked_orders_scores() {
 
 #[test]
 fn keyed_ranked_per_key_extremes() {
-    let mut st = Stream::new(fresh_db("keyed_ranked.db"), terminal::KeyedRanked::new("kr"));
+    let mut st = Stream::new(
+        fresh_db("keyed_ranked.db"),
+        terminal::KeyedRanked::new("kr"),
+    );
 
     let rec = |k: u32, s: u64, v: &str| Keyed::new(k, Scored::new(s, v.to_string()));
     st.wtx(|tx| {

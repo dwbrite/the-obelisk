@@ -700,7 +700,7 @@ where
     fn highest_alive(&self) -> Option<(u8, u32)> {
         let mut best: Option<(u8, u32)> = None;
         for (i, m) in self.meta.iter().enumerate() {
-            if m.alive && best.map_or(true, |(bl, _)| m.level > bl) {
+            if m.alive && best.is_none_or(|(bl, _)| m.level > bl) {
                 best = Some((m.level, i as u32));
             }
         }

@@ -82,7 +82,10 @@ impl<D: Clone, F: Fn(&D) -> f64> Push<D> for Stats<D, F> {
             return;
         }
         let ks = self.ks.clone().unwrap();
-        let (count, sum, sumsq) = tx.get(&ks, [0]).map(|v| decode(&v)).unwrap_or((0, 0.0, 0.0));
+        let (count, sum, sumsq) = tx
+            .get(&ks, [0])
+            .map(|v| decode(&v))
+            .unwrap_or((0, 0.0, 0.0));
         let (count, sum, sumsq) = (count + self.count, sum + self.sum, sumsq + self.sumsq);
         if count != 0 || sum != 0.0 || sumsq != 0.0 {
             tx.insert(&ks, [0], encode(count, sum, sumsq));

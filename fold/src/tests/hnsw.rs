@@ -61,7 +61,11 @@ fn hnsw_nearest_upsert_retract_recover() {
     assert!(r.is_err());
     st.rtx(|idx| {
         assert_eq!(idx.len(), 2);
-        assert!(ids(&idx.search(&[5.0, 5.0, 5.0, 5.0])).iter().all(|&k| k != 9));
+        assert!(
+            ids(&idx.search(&[5.0, 5.0, 5.0, 5.0]))
+                .iter()
+                .all(|&k| k != 9)
+        );
     });
 
     // reopening rebuilds the graph from the persisted vectors

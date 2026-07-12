@@ -10,13 +10,13 @@ struct Slot {
 struct AlignedSlots([u8; TABLE_SIZE * SLOT_SIZE]);
 static ALIGNED_SLOTS: AlignedSlots =
     AlignedSlots(*include_bytes!(concat!(env!("OUT_DIR"), "/weights.bin")));
-static SLOTS: &'static [Slot; TABLE_SIZE] = unsafe { std::mem::transmute(&ALIGNED_SLOTS.0) };
+static SLOTS: &[Slot; TABLE_SIZE] = unsafe { std::mem::transmute(&ALIGNED_SLOTS.0) };
 
 #[repr(C, align(4))]
 struct AlignedSeeds([u8; NUM_BUCKETS * 4]);
 static ALIGNED_S: AlignedSeeds =
     AlignedSeeds(*include_bytes!(concat!(env!("OUT_DIR"), "/seeds.bin")));
-static SEEDS: &'static [u32; NUM_BUCKETS] = unsafe { std::mem::transmute(&ALIGNED_S.0) };
+static SEEDS: &[u32; NUM_BUCKETS] = unsafe { std::mem::transmute(&ALIGNED_S.0) };
 
 #[inline(always)]
 pub fn lookup(key: &str) -> Option<&'static Param> {

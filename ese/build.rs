@@ -5,8 +5,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-static MODEL_URL: &'static str = "https://huggingface.co/sentence-transformers/static-retrieval-mrl-en-v1/resolve/main/0_StaticEmbedding/model.safetensors";
-static TOKENIZER_URL: &'static str = "https://huggingface.co/sentence-transformers/static-retrieval-mrl-en-v1/resolve/main/0_StaticEmbedding/tokenizer.json";
+static MODEL_URL: &str = "https://huggingface.co/sentence-transformers/static-retrieval-mrl-en-v1/resolve/main/0_StaticEmbedding/model.safetensors";
+static TOKENIZER_URL: &str = "https://huggingface.co/sentence-transformers/static-retrieval-mrl-en-v1/resolve/main/0_StaticEmbedding/tokenizer.json";
 
 fn main() {
     let out = Path::new(&env::var("OUT_DIR").unwrap()).to_path_buf();
@@ -397,7 +397,7 @@ fn dtype_sz() -> usize {
 fn shared_model_dir(out: &Path) -> PathBuf {
     let cache_root = out
         .ancestors()
-        .find(|p| p.file_name().map_or(false, |f| f == "target"))
+        .find(|p| p.file_name().is_some_and(|f| f == "target"))
         .map(Path::to_path_buf)
         .or_else(|| env::var_os("CARGO_TARGET_DIR").map(PathBuf::from))
         .unwrap_or_else(|| out.to_path_buf());

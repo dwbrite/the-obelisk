@@ -140,7 +140,10 @@ async fn serve(msg_tx: mpsc::Sender<(String, String)>, state_rx: watch::Receiver
 
 type AppState = (mpsc::Sender<(String, String)>, watch::Receiver<ChatState>);
 
-async fn ws_upgrade(State(state): State<AppState>, ws: WebSocketUpgrade) -> impl axum::response::IntoResponse {
+async fn ws_upgrade(
+    State(state): State<AppState>,
+    ws: WebSocketUpgrade,
+) -> impl axum::response::IntoResponse {
     ws.on_upgrade(move |socket| handle_socket(socket, state))
 }
 

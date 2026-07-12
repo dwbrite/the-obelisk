@@ -126,8 +126,7 @@ impl<'tx, R: Readable, K: Serialize, V: DeserializeOwned> TableReader<'tx, R, K,
     /// The current value under `key`, if any.
     pub fn get(&self, key: &K) -> Option<V> {
         self.with_key(key, |s, k| {
-            s.tx
-                .get(&s.ks, k)
+            s.tx.get(&s.ks, k)
                 .unwrap()
                 .map(|v| postcard::from_bytes(&v).unwrap())
         })

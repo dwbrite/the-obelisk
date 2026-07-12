@@ -48,5 +48,8 @@ fn main() {
         assert!(!entries.contains(&"peat".to_string()));
     });
 
-    println!("state lives in {} — rerun with the cleanup removed to see persistence", db_path.display());
+    println!(
+        "state lives in {} — rerun with the cleanup removed to see persistence",
+        db_path.display()
+    );
 }

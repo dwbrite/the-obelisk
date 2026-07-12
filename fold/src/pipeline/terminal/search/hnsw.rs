@@ -78,12 +78,7 @@ where
     }
 
     // reconstruct the graph from the persisted `postcard(K) -> vector` rows
-    fn rebuild(
-        &mut self,
-        metric: M,
-        seed: u64,
-        entries: impl Iterator<Item = (Vec<u8>, Vec<u8>)>,
-    ) {
+    fn rebuild(&mut self, metric: M, seed: u64, entries: impl Iterator<Item = (Vec<u8>, Vec<u8>)>) {
         self.index = anny::hnsw::Hnsw::new(metric, seed);
         self.ids.clear();
         self.keys.clear();

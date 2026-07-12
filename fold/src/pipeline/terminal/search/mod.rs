@@ -253,8 +253,7 @@ pub struct Bm25Reader<'tx, R: Readable, K, T> {
     _p: PhantomData<K>,
 }
 
-impl<'tx, R: Readable, K: DeserializeOwned, T: Fn(&str, &mut Vec<u8>)> Bm25Reader<'tx, R, K, T>
-{
+impl<'tx, R: Readable, K: DeserializeOwned, T: Fn(&str, &mut Vec<u8>)> Bm25Reader<'tx, R, K, T> {
     fn stats(&self) -> (i64, i64) {
         self.tx
             .get(&self.ks, [STATS])
@@ -305,9 +304,7 @@ impl<'tx, R: Readable, K: DeserializeOwned, T: Fn(&str, &mut Vec<u8>)> Bm25Reade
             for (i, term) in bufs.terms.split(|&b| b == 0).enumerate() {
                 // count duplicate query terms once: queries are short, so a
                 // rescan of prior terms beats sorting or hashing
-                if term.is_empty()
-                    || bufs.terms.split(|&b| b == 0).take(i).any(|p| p == term)
-                {
+                if term.is_empty() || bufs.terms.split(|&b| b == 0).take(i).any(|p| p == term) {
                     continue;
                 }
                 bufs.key.clear();
