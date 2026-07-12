@@ -25,6 +25,8 @@
 //! - [`InvertedIndex`] — reverse index: all keys posted under a value
 //! - [`search::Bm25`] — full-text search over `Keyed { key: document, val:
 //!   text }`, tokenized on ingest and query, ranked by BM25 relevance
+//! - [`search::Hnsw`] — approximate nearest-neighbor search over `Keyed {
+//!   key: document, val: embedding }`, backed by a retractable HNSW graph
 //!
 //! # Sinks over [`Scored`]`<S, V>` data
 //! Produced by [`ScoreBy`](crate::pipeline::ScoreBy); scores are ordered
@@ -44,10 +46,10 @@
 //! - *Counting* sinks ([`Count`], [`Bag`], [`Stats`], [`Histogram`],
 //!   [`Ranked`], [`KeyedRanked`]) accumulate signed multiplicities, so
 //!   deltas cancel exactly at any magnitude.
-//! - *Posting* sinks ([`InvertedIndex`], [`Multimap`], [`search::Bm25`])
-//!   are set-semantic per record: a transaction's net-positive delta
-//!   inserts, net-negative deletes, regardless of magnitude — no prior
-//!   state is read, keeping mass retraction cheap.
+//! - *Posting* sinks ([`InvertedIndex`], [`Multimap`], [`search::Bm25`],
+//!   [`search::Hnsw`]) are set-semantic per record: a transaction's
+//!   net-positive delta inserts, net-negative deletes, regardless of
+//!   magnitude — no prior state is read, keeping mass retraction cheap.
 //! - [`Table`] is last-writer-wins: the final push to a key within a
 //!   transaction decides its value (positive delta) or removal
 //!   (non-positive).

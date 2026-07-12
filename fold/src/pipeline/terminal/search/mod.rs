@@ -1,4 +1,5 @@
-//! Ranked full-text search sinks.
+//! Ranked search sinks: full-text relevance ([`Bm25`]) and vector
+//! nearest-neighbor ([`Hnsw`]).
 
 use std::{cell::RefCell, collections::hash_map::Entry, marker::PhantomData};
 
@@ -10,6 +11,9 @@ use crate::{
     pipeline::{Keyed, Push, Scored},
     stream::{PipelineInitCtx, WriteTx},
 };
+
+mod hnsw;
+pub use hnsw::*;
 
 /// Default tokenizer: split on whitespace, strip non-ASCII-alphanumerics,
 /// lowercase. Appends each nonempty token to `tokens` terminated by `\0`

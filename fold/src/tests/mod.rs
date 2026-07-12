@@ -9,6 +9,9 @@ mod agnews;
 mod bm25;
 
 #[cfg(test)]
+mod hnsw;
+
+#[cfg(test)]
 mod keyed_stream;
 
 #[cfg(test)]

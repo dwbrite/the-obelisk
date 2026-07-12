@@ -44,6 +44,7 @@ macro_rules! reduce_metric {
         finish = $finish:expr $(,)?
     ) => {
         $(#[$doc])*
+        #[derive(Clone, Copy)]
         pub struct $name;
         impl<T: Scalar> Metric<T> for $name {
             type Out = f32;
@@ -93,6 +94,7 @@ reduce_metric! {
     finish = |r:f32| -r,
 }
 
+#[derive(Clone, Copy)]
 pub struct Cosine;
 impl<T: Scalar> Metric<T> for Cosine {
     type Out = f32;
@@ -132,6 +134,7 @@ impl<T: Scalar> Metric<T> for Cosine {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct Hamming;
 impl<T: Scalar> Metric<T> for Hamming {
     type Out = u32;
