@@ -16,6 +16,16 @@ Run your project with:
 cargo run -p [project-name]
 ```
 
+## Hackathon submission
+
+To enter the hackathon: fork this repo, build your project, then open a pull request against upstream. The PR is your official submission acknowledgment — be sure to fill which category you are submitting for in the PR template:
+
+- agent support
+- performance
+- novel interface / gaming
+
+Fill out the rest of the template (team, description, how to run) and you're good.
+
 ## In this workspace
 
 ### Fold
