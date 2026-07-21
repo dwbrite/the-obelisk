@@ -8,6 +8,9 @@ opt-level = 3
 codegen-units = 1
 lto = "fat"
 
+[profile.dev]
+opt-level = 3 # required for reasonable ese/anny perf
+
 # hoisted from anny
 [profile.bench]
 lto = "fat"
