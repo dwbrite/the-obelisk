@@ -29,7 +29,7 @@ fn is_home(n: &Note) -> bool {
     has_tag(n, "home")
 }
 fn is_published_blog(n: &Note) -> bool {
-    n.published
+    has_tag(n, "anm_blog") && n.published
 }
 fn is_void(n: &Note) -> bool {
     has_tag(n, "void")
