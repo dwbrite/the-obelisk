@@ -1,12 +1,12 @@
 ---
 title: autopilot
 aliases:
-  - "autopilot"
+  - autopilot
 date: 2021-02-23
 tags:
   - etc
   - anm_blog
-published: true
+published: false
 rating: 6
 category: blog
 ---
