@@ -12,7 +12,7 @@ use notify_debouncer_full::{new_debouncer, DebounceEventResult, DebouncedEvent};
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
 
-const VAULT: &str = "/home/dewbrite/docs/void";
+const VAULT: &str = "my-vault";
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 struct Note {

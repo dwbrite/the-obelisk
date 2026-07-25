@@ -1,0 +1,22 @@
+---
+title: pocket progress 1
+aliases:
+  - "pocket progress 1"
+date: 2015-06-22
+tags:
+  - pkmn
+  - anm_blog
+published: true
+category: blog
+rating: 4
+---
+
+![[first-screenshot.png]]
+
+It may not look like much but this is really exciting progress for me and this project. This is a Pokemon recreation I’m making with Slick2D/Java that I’ve been working on for the past two weeks. There’s no collisions or animations quite yet but those should be done within the next two days.
+
+This game is a recreation of FR/LG that’s expanded to several other regions in a single story line including Hoenn, Johto, and Orre. The main goal is to have a “pure” Pokemon game in which all Pokemon can be found and there are no weird Dex restrictions (For example, not being able to evolve a Crobat in FR/LG before the national dex, or having game specific Pokemon like Vulpix or Bellsprout).
+
+The biggest problem is leveling throughout regions. I think the best solution is to have a level lock until you beat certain gyms - similar to how traded Pokemon of a high level refuse to listen.
+
+If you have any ideas send me an email and I’ll think about it. Remember to check my live update page for more information on what exactly is being done!
