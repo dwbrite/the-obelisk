@@ -45,6 +45,30 @@ async function tick() {
   requestAnimationFrame(tick);
 }
 
+import { EditorState } from '@codemirror/state';
+import { EditorView } from '@codemirror/view';
+import { markdown } from '@codemirror/lang-markdown';
+
+const view = new EditorView({
+    state: EditorState.create({
+        doc: '# Hello World\n\nThis is **bold** and *italic* text.',
+        extensions: [
+            markdown(),
+        ],
+    }),
+    parent: document.getElementById('app')!,
+});
+
+// Required: Track mouse selection state
+view.contentDOM.addEventListener('mousedown', () => {
+    view.dispatch({ effects: setMouseSelecting.of(true) });
+});
+document.addEventListener('mouseup', () => {
+    requestAnimationFrame(() => {
+        view.dispatch({ effects: setMouseSelecting.of(false) });
+    });
+});
+
 window.addEventListener("DOMContentLoaded", () => {
   tableEl = document.querySelector("#notes-table")!;
   document.querySelectorAll<HTMLButtonElement>("#view-buttons button").forEach(

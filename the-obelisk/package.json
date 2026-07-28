@@ -10,12 +10,18 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@milkdown/crepe": "^7.21.3",
+    "@milkdown/kit": "^7.21.3",
+    "@retronav/ixora": "^0.3.3",
     "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-opener": "^2"
+    "@tauri-apps/plugin-opener": "^2",
+    "codemirror-live-markdown": "^0.5.1-alpha.1",
+    "katex": "^0.18.1",
+    "lowlight": "^3.3.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
-		"vite": "^8.0.16",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "vite": "^8.0.16"
   }
 }

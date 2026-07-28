@@ -1,7 +1,7 @@
 ---
 tags:
   - home
-published: true
+published: false
 ---
 hey! seems like you're interested in some of the stuff I've written!
 

@@ -67,9 +67,6 @@ fn view(pred: fn(&Note) -> bool, table: &str) -> View {
 
 ///////////////////////////////////////////////////////////////////////////
 
-// fn pointers (not closures) so the pipeline type is nameable for managed state.
-type HomeView = Filter<Note, fn(&Note) -> bool, KeyBy<fn(&Note) -> String, Table<String, Note>, String, Note>>;
-
 fn has_home_tag(n: &Note) -> bool {
     n.tags.iter().any(|t| t == "home")
 }
@@ -270,6 +267,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            let data_dir = app.path().app_data_dir();
+            println!("{:?}", data_dir);
+
             let db = app.path().app_data_dir()?.join("vault-index.db");
             let vault = Arc::new(Mutex::new(open_vault(&db)));
             app.manage(vault.clone());

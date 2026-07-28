@@ -1,11 +1,33 @@
 :root {
-  color-scheme: light dark;
-  font-family: system-ui, sans-serif;
+  font-family: Karla, system-ui, sans-serif;
   font-size: 15px;
+  /*color: #ebdac6;*/
+
+
+  /*--md-heading: #ebdac6;*/
+  /*--md-bold: #f15044;*/
+  /*--md-italic: #4db2d1;*/
+  /*--md-link: #2e9768;*/
+  /*--md-code-bg: #2a241e;*/
+  /*--md-bg: #2e261f;*/
+
+  --background: 0 0% 100%;
+  --foreground: 220 9% 9%;
+  --border: 220 13% 91%;
+  --muted: 220 14% 96%;
+  --muted-foreground: 220 9% 46%;
+  --primary: 220 90% 56%;
+
+  /* markdown-specific (fall back to the ones above) */
+  --md-heading: 220 9% 9%;
+  --md-bold: 220 9% 9%;
+  --md-italic: 220 9% 9%;
+  --md-link: 220 90% 56%;
 }
 
 body {
   margin: 0;
+  background-color: #2e261f;
 }
 
 .container {
